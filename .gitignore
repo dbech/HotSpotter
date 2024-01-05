@@ -1,4 +1,6 @@
 input/*
+!input/*.md
 output/*
+!output/*.md
 __pycache__/
 *.pyc
