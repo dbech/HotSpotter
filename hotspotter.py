@@ -1,3 +1,4 @@
+import math
 import numpy
 import xmltodict
 from thermal import Thermal
@@ -11,7 +12,7 @@ CAMERA_SENSOR_WIDTH = 36 # millimeter full frame equiv
 def calculate_gsd(camera_altitude, camera_sensor_mm, camera_focal_length, image_px):
     return ((camera_altitude*1000) * camera_sensor_mm) / (camera_focal_length * image_px)
 
-image_path = 'input/DJI_0007_T.JPG' # @todo: change to recusively work through a folder
+image_path = 'input/DJI_0127_T.JPG' # @todo: change to recusively work through a folder
 image = Image.open(image_path)
 image_height = image.height
 image_width = image.width
@@ -25,7 +26,7 @@ xmp_dict = xmltodict.parse(xmp_str).get('x:xmpmeta').get('rdf:RDF').get('rdf:Des
 assert isinstance(xmp_dict, dict)
 
 camera_altitude = float(xmp_dict.get('@drone-dji:RelativeAltitude').replace('+', '')) # since we need to know the size of the object in the image and the object in the image is the ground we'll need the distance to the ground to calculate it's size
-camera_heading = xmp_dict.get('@drone-dji:GimbalYawDegree') # we need this to orient the image relative to north
+camera_heading = float(xmp_dict.get('@drone-dji:GimbalYawDegree').replace('+', '')) # we need this to orient the image relative to north
 
 GSDh = calculate_gsd(camera_altitude, CAMERA_SENSOR_HEIGHT, CAMERA_FOCAL_LENGTH, image_height) # how tall is a pixel mm
 GSDw = calculate_gsd(camera_altitude, CAMERA_SENSOR_WIDTH, CAMERA_FOCAL_LENGTH, image_width) # how wide is a pixel mm
@@ -41,5 +42,16 @@ temperature = thermal.parse_dirp2(image_filename=image_path, image_height=image_
 assert isinstance(temperature, numpy.ndarray) # check we got the 2D array we're expecting
 mask_result_indexes = numpy.where(temperature > TEMPERATURE_MASK)
 
-print(GSDh*image_height/1000)
-print(GSDw*image_width/1000)
+mask_results_bearings = []
+mask_results_distance = []
+for i in enumerate(mask_result_indexes[0]):
+    centre = numpy.array([image_width/2, image_height/2])
+    north = numpy.array([image_width/2, 0])
+    hotspot = numpy.array([mask_result_indexes[1][i[0]], i[1]])
+
+    north_vector = centre - north
+    hotspot_vector = centre - hotspot
+    angle = (numpy.degrees(math.atan2(numpy.linalg.det([north_vector, hotspot_vector]), numpy.dot(north_vector, hotspot_vector))) + camera_heading) % 360
+
+    mask_results_bearings.insert(i[0], angle)
+    mask_results_distance.insert(i[0], numpy.linalg.norm(hotspot_vector)) #this won't convert use pythagorus 
