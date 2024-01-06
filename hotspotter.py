@@ -1,8 +1,10 @@
 import math
 import numpy
 import xmltodict
+import simplekml
 from thermal import Thermal
 from PIL import Image
+from geographiclib.geodesic import Geodesic
 
 TEMPERATURE_MASK = 145 # we're looking for tempuratures in cencius greater than this value.
 CAMERA_FOCAL_LENGTH = 38 # millimeter full frame equiv https://enterprise.dji.com/mavic-2-enterprise-advanced/specs 
@@ -42,8 +44,9 @@ temperature = thermal.parse_dirp2(image_filename=image_path, image_height=image_
 assert isinstance(temperature, numpy.ndarray) # check we got the 2D array we're expecting
 mask_result_indexes = numpy.where(temperature > TEMPERATURE_MASK)
 
-mask_results_bearings = []
-mask_results_distance = []
+geod = Geodesic(6378137.0, 0.003352810681183637418) # https://www.legislation.gov.au/F2017L01352/latest/text https://en.wikipedia.org/wiki/Geodetic_Reference_System_1980
+kml = simplekml.Kml(name=image_path.replace('input/', ''), description=f'Capture Date: {xmp_dict['@xmp:CreateDate']}\nCaptured By: {xmp_dict['@tiff:Model']}')
+hotspot_style = simplekml.Style(iconstyle=simplekml.IconStyle(scale=0.8, icon=simplekml.Icon(href='http://maps.google.com/mapfiles/kml/shapes/firedept.png')), labelstyle=simplekml.LabelStyle(scale=0.4))
 for i in enumerate(mask_result_indexes[0]):
     centre = numpy.array([image_width/2, image_height/2])
     north = numpy.array([image_width/2, 0])
@@ -52,6 +55,8 @@ for i in enumerate(mask_result_indexes[0]):
     north_vector = centre - north
     hotspot_vector = centre - hotspot
     angle = (numpy.degrees(math.atan2(numpy.linalg.det([north_vector, hotspot_vector]), numpy.dot(north_vector, hotspot_vector))) + camera_heading) % 360
+    distance = numpy.linalg.norm(hotspot_vector) * (((GSDh+GSDw)/2)/1000) # this is probably inaccurate, should do the math ourselves to apply GSD per axis
 
-    mask_results_bearings.insert(i[0], angle)
-    mask_results_distance.insert(i[0], numpy.linalg.norm(hotspot_vector)) #this won't convert use pythagorus 
+    direct_dict = geod.Direct(float(xmp_dict['@drone-dji:GpsLatitude'].replace('+', '')), float(xmp_dict['@drone-dji:GpsLongitude'].replace('+', '')), angle, distance)
+    kml.newpoint(name=f'{temperature[i[1]][mask_result_indexes[1][i[0]]]:.2f}\N{DEGREE SIGN}C', coords=[(direct_dict['lon2'], direct_dict['lat2'])], altitudemode=simplekml.AltitudeMode.clamptoground).style=hotspot_style
+kml.save('output/DJI_0127_T.kml')
