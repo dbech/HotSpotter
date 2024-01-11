@@ -6,6 +6,7 @@ import simplekml
 from thermal import Thermal
 from PIL import Image
 from geographiclib.geodesic import Geodesic
+from datetime import datetime
 
 TEMPERATURE_MASK = 100 # we're looking for tempuratures in cencius greater than this value.
 CAMERA_FOCAL_LENGTH = 38 # millimeter full frame equiv https://enterprise.dji.com/mavic-2-enterprise-advanced/specs 
@@ -16,6 +17,9 @@ def calculate_gsd(camera_altitude, camera_sensor_mm, camera_focal_length, image_
     return ((camera_altitude*1000) * camera_sensor_mm) / (camera_focal_length * image_px)
 
 directory = os.fsencode('input/')
+geod = Geodesic(6378137.0, 0.003352810681183637418) # https://www.legislation.gov.au/F2017L01352/latest/text https://en.wikipedia.org/wiki/Geodetic_Reference_System_1980
+kml = simplekml.Kml(name=datetime.today().strftime('%Y-%m-%d'))
+hotspot_style = simplekml.Style(iconstyle=simplekml.IconStyle(scale=0.8, icon=simplekml.Icon(href='http://maps.google.com/mapfiles/kml/shapes/firedept.png')), labelstyle=simplekml.LabelStyle(scale=0.4))
     
 for file in os.listdir(directory):
     filename = os.fsdecode(file)
@@ -55,9 +59,6 @@ for file in os.listdir(directory):
             print(f'No hotspots found in {image_path}')
             continue
 
-        geod = Geodesic(6378137.0, 0.003352810681183637418) # https://www.legislation.gov.au/F2017L01352/latest/text https://en.wikipedia.org/wiki/Geodetic_Reference_System_1980
-        kml = simplekml.Kml(name=image_path.replace('input/', ''), description=f'Capture Date: {xmp_dict['@xmp:CreateDate']}\nCaptured By: {xmp_dict['@tiff:Model']}')
-        hotspot_style = simplekml.Style(iconstyle=simplekml.IconStyle(scale=0.8, icon=simplekml.Icon(href='http://maps.google.com/mapfiles/kml/shapes/firedept.png')), labelstyle=simplekml.LabelStyle(scale=0.4))
         for i in enumerate(mask_result_indexes[0]):
             centre = numpy.array([image_width/2, image_height/2])
             north = numpy.array([image_width/2, 0])
@@ -69,5 +70,6 @@ for file in os.listdir(directory):
             distance = numpy.linalg.norm(hotspot_vector) * (((GSDh+GSDw)/2)/1000) # this is probably inaccurate, should do the math ourselves to apply GSD per axis
 
             direct_dict = geod.Direct(float(xmp_dict['@drone-dji:GpsLatitude'].replace('+', '')), float(xmp_dict['@drone-dji:GpsLongitude'].replace('+', '')), angle, distance)
-            kml.newpoint(name=f'{temperature[i[1]][mask_result_indexes[1][i[0]]]:.2f}\N{DEGREE SIGN}C', coords=[(direct_dict['lon2'], direct_dict['lat2'])], altitudemode=simplekml.AltitudeMode.clamptoground).style=hotspot_style
-        kml.save(f'output/{image_path.replace('input/', '').replace('JPG', 'kml')}')
+            kml.newpoint(name=f'{temperature[i[1]][mask_result_indexes[1][i[0]]]:.2f}\N{DEGREE SIGN}C', description=f'File Name: {image_path.replace('input/', '')}\nCapture Date: {xmp_dict['@xmp:CreateDate']}\nCaptured By: {xmp_dict['@tiff:Model']}', coords=[(direct_dict['lon2'], direct_dict['lat2'])], altitudemode=simplekml.AltitudeMode.clamptoground).style=hotspot_style
+
+kml.save(f'output/{datetime.today().strftime('%Y-%m-%d')}.kml')
