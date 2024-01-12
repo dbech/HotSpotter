@@ -8,7 +8,7 @@ from PIL import Image
 from geographiclib.geodesic import Geodesic
 from datetime import datetime
 
-TEMPERATURE_MASK = 100 # we're looking for tempuratures in cencius greater than this value.
+TEMPERATURE_MASK = 75 # we're looking for tempuratures in cencius greater than this value.
 CAMERA_FOCAL_LENGTH = 38 # millimeter full frame equiv https://enterprise.dji.com/mavic-2-enterprise-advanced/specs 
 CAMERA_SENSOR_HEIGHT = 24 # millimeter full frame equiv
 CAMERA_SENSOR_WIDTH = 36 # millimeter full frame equiv
@@ -18,13 +18,13 @@ def calculate_gsd(camera_altitude, camera_sensor_mm, camera_focal_length, image_
 
 directory = os.fsencode('input/')
 geod = Geodesic(6378137.0, 0.003352810681183637418) # https://www.legislation.gov.au/F2017L01352/latest/text https://en.wikipedia.org/wiki/Geodetic_Reference_System_1980
-kml = simplekml.Kml(name=datetime.today().strftime('%Y-%m-%d'))
+kml = simplekml.Kml(name=datetime.today().strftime('%Y-%m-%d'), description=f'Tempurature Mask: {TEMPERATURE_MASK}\N{DEGREE SIGN}C')
 hotspot_style = simplekml.Style(iconstyle=simplekml.IconStyle(scale=0.8, icon=simplekml.Icon(href='http://maps.google.com/mapfiles/kml/shapes/firedept.png')), labelstyle=simplekml.LabelStyle(scale=0.4))
     
 for file in os.listdir(directory):
     filename = os.fsdecode(file)
     if filename.endswith(".JPG"):
-        image_path = f'input/{filename}' # @todo: change to recusively work through a folder
+        image_path = f'input/{filename}'
         image = Image.open(image_path)
         image_height = image.height
         image_width = image.width
@@ -56,16 +56,15 @@ for file in os.listdir(directory):
         try:
             assert len(mask_result_indexes[0]) > 0
         except:
-            print(f'No hotspots found in {image_path}')
             continue
 
+        centre = numpy.array([image_width/2, image_height/2])
+        north = numpy.array([image_width/2, 0])
+        north_vector = centre - north
         for i in enumerate(mask_result_indexes[0]):
-            centre = numpy.array([image_width/2, image_height/2])
-            north = numpy.array([image_width/2, 0])
             hotspot = numpy.array([mask_result_indexes[1][i[0]], i[1]])
-
-            north_vector = centre - north
             hotspot_vector = centre - hotspot
+
             angle = (numpy.degrees(math.atan2(numpy.linalg.det([north_vector, hotspot_vector]), numpy.dot(north_vector, hotspot_vector))) + camera_heading) % 360
             distance = numpy.linalg.norm(hotspot_vector) * (((GSDh+GSDw)/2)/1000) # this is probably inaccurate, should do the math ourselves to apply GSD per axis
 
