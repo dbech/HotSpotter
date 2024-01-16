@@ -58,17 +58,15 @@ for file in os.listdir(directory):
         except:
             continue
 
-        centre = numpy.array([image_width/2, image_height/2])
-        north = numpy.array([image_width/2, 0])
-        north_vector = centre - north
+        corner_direct_dict = geod.Direct(float(xmp_dict['@drone-dji:GpsLatitude'].replace('+', '')), float(xmp_dict['@drone-dji:GpsLongitude'].replace('+', '')), 45, math.sqrt(math.pow((image_width/2)*GSDw, 2) + math.pow((image_height/2)*GSDh, 2))/1000)
         for i in enumerate(mask_result_indexes[0]):
             hotspot = numpy.array([mask_result_indexes[1][i[0]], i[1]])
-            hotspot_vector = centre - hotspot
 
-            angle = (numpy.degrees(math.atan2(numpy.linalg.det([north_vector, hotspot_vector]), numpy.dot(north_vector, hotspot_vector))) + camera_heading) % 360
-            distance = numpy.linalg.norm(hotspot_vector) * (((GSDh+GSDw)/2)/1000) # this is probably inaccurate, should do the math ourselves to apply GSD per axis
+            distance = math.sqrt(math.pow(hotspot[0]*GSDw, 2) + math.pow(hotspot[1]*GSDh, 2))/1000
+            # α = arctan(a / b) we will always put the right angle directly below the corner
+            angle = math.atan((hotspot[1]*GSDh)/(hotspot[0]*GSDw))
 
-            direct_dict = geod.Direct(float(xmp_dict['@drone-dji:GpsLatitude'].replace('+', '')), float(xmp_dict['@drone-dji:GpsLongitude'].replace('+', '')), angle, distance)
-            kml.newpoint(name=f'{temperature[i[1]][mask_result_indexes[1][i[0]]]:.2f}\N{DEGREE SIGN}C', description=f'File Name: {image_path.replace('input/', '')}\nCapture Date: {xmp_dict['@xmp:CreateDate']}\nCaptured By: {xmp_dict['@tiff:Model']}', coords=[(direct_dict['lon2'], direct_dict['lat2'])], altitudemode=simplekml.AltitudeMode.clamptoground).style=hotspot_style
+            hotspot_direct_dict = geod.Direct(corner_direct_dict['lat2'], corner_direct_dict['lon2'], angle, distance)
+            kml.newpoint(name=f'{temperature[i[1]][mask_result_indexes[1][i[0]]]:.2f}\N{DEGREE SIGN}C', description=f'File Name: {image_path.replace('input/', '')}\nCapture Date: {xmp_dict['@xmp:CreateDate']}\nCaptured By: {xmp_dict['@tiff:Model']}', coords=[(hotspot_direct_dict['lon2'], hotspot_direct_dict['lat2'])], altitudemode=simplekml.AltitudeMode.clamptoground).style=hotspot_style
 
 kml.save(f'output/{datetime.today().strftime('%Y-%m-%d')}.kml')
