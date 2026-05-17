@@ -1,0 +1,1 @@
+DJI Thermal images -> KML
